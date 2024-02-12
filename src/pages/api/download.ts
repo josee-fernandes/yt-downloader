@@ -2,10 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import YTDlpWrap from 'yt-dlp-wrap'
 import fs from 'node:fs'
 
-interface RequestType {
-  mode: 'audio' | 'video'
-  url: string
-}
+type OutputType = 'audio' | 'video'
 
 const VIDEO_ARGS = [
   '--write-description',
@@ -29,13 +26,9 @@ const AUDIO_ARGS = [
   '-o',
 ] as const
 
-interface CommandType {
-  args: typeof VIDEO_ARGS | typeof AUDIO_ARGS
-  url: string
-  outputUrl: string
-}
+const OUTPUT_FOLDER = 'public/downloads'
 
-const OUTPUT_FOLDER = 'downloads'
+const BINARY_PATH = 'yt-dlp/binary'
 
 export default async function handler(
   req: NextApiRequest,
@@ -45,27 +38,21 @@ export default async function handler(
     return res.status(405).end()
   }
 
-  const binaryPath = 'yt-dlp/binary'
-
-  const ytDlpWrap = new YTDlpWrap(binaryPath)
-
-  const requesting: RequestType = {
-    mode: 'audio',
-    url: 'https://www.youtube.com/watch?v=QJO3ROT-A4E',
+  if (!req.query.url && !req.query.type) {
+    return res.status(404).json({ message: 'Missing video url or output type' })
   }
 
-  const { mode, url } = requesting
+  const url = String(req.query.url)
+  const outputType = String(req.query.type) as OutputType
 
-  const commandOptions: CommandType = {
-    args: mode === 'audio' ? AUDIO_ARGS : VIDEO_ARGS,
-    url,
-    outputUrl:
-      mode === 'video'
-        ? `${OUTPUT_FOLDER}/%(title)s/%(title)s-%(id)s.%(ext)s`
-        : `${OUTPUT_FOLDER}/%(title)s-%(id)s.%(ext)s`,
-  }
+  const ytDlpWrap = new YTDlpWrap(BINARY_PATH)
 
-  const { args, outputUrl } = commandOptions
+  const args = outputType === 'audio' ? AUDIO_ARGS : VIDEO_ARGS
+
+  const outputUrl =
+    outputType === 'video'
+      ? `${OUTPUT_FOLDER}/%(title)s/%(title)s [%(id)s].%(ext)s`
+      : `${OUTPUT_FOLDER}/%(title)s [%(id)s].%(ext)s`
 
   const command = [...args, outputUrl, url]
 
@@ -73,15 +60,28 @@ export default async function handler(
     fs.mkdirSync(OUTPUT_FOLDER)
   }
 
-  const ytDlpEventEmitter = ytDlpWrap
-    .exec(command)
-    .on('ytDlpEvent', (eventType, eventData) =>
-      console.log(eventType, eventData),
-    )
-    .on('error', (error) => console.error(error))
-    .on('close', () => console.log('all done'))
+  try {
+    const response = await ytDlpWrap.execPromise(command)
 
-  console.log({ exitCode: ytDlpEventEmitter.ytDlpProcess?.exitCode })
+    const hasAlreadyDownloaded = !!response.includes('already been downloaded')
 
-  res.status(200).json({ success: true })
+    let storedFileUrl = ''
+
+    if (hasAlreadyDownloaded) {
+      storedFileUrl = response
+        .split('[download] public/')[1]
+        .split(' has already been downloaded')[0]
+    } else {
+      storedFileUrl = response
+        .split('[ExtractAudio] Destination: public/')[1]
+        .split('\nDeleting original file')[0]
+    }
+    return res
+      .status(200)
+      .json({ message: 'Downloaded successfully!', url: storedFileUrl })
+  } catch (error) {
+    return res
+      .status(400)
+      .json({ message: "Couldn't download the provided url" })
+  }
 }
