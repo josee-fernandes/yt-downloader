@@ -1,6 +1,7 @@
+import fs from 'node:fs'
+
 import type { NextApiRequest, NextApiResponse } from 'next'
 import YTDlpWrap from 'yt-dlp-wrap'
-import fs from 'node:fs'
 
 type OutputType = 'audio' | 'video'
 
@@ -26,7 +27,7 @@ const AUDIO_ARGS = [
   '-o',
 ] as const
 
-const OUTPUT_FOLDER = 'public/downloads'
+const OUTPUT_FOLDER = 'public/tmp'
 
 const BINARY_PATH = 'yt-dlp/binary'
 
@@ -76,6 +77,7 @@ export default async function handler(
         .split('[ExtractAudio] Destination: public/')[1]
         .split('\nDeleting original file')[0]
     }
+
     return res
       .status(200)
       .json({ message: 'Downloaded successfully!', url: storedFileUrl })
