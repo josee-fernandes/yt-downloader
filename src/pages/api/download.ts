@@ -29,7 +29,7 @@ const AUDIO_ARGS = [
 
 const OUTPUT_FOLDER = 'public/tmp'
 
-const BINARY_PATH = 'yt-dlp/binary'
+const BINARY_PATH = 'yt-dlp'
 
 export default async function handler(
   req: NextApiRequest,
@@ -45,6 +45,8 @@ export default async function handler(
 
   const url = String(req.query.url)
   const outputType = String(req.query.type) as OutputType
+
+  console.log(BINARY_PATH)
 
   const ytDlpWrap = new YTDlpWrap(BINARY_PATH)
 
@@ -82,6 +84,8 @@ export default async function handler(
       .status(200)
       .json({ message: 'Downloaded successfully!', url: storedFileUrl })
   } catch (error) {
+    console.log({ error })
+
     return res
       .status(400)
       .json({ message: "Couldn't download the provided url" })
